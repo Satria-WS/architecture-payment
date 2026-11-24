@@ -1,0 +1,24 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - link "Skip to content":
+      - /url: "#geist-skip-nav"
+    - navigation [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - link "Go to Vercel homepage" [ref=e6] [cursor=pointer]:
+            - /url: https://vercel.com/home?utm_source=next-site&utm_medium=banner&utm_campaign=agent-feedback
+            - img "Vercel" [ref=e7]
+          - link [ref=e10] [cursor=pointer]:
+            - /url: /
+            - img "NextjsLogotype" [ref=e11]
+        - generic [ref=e12]:
+          - button "Search documentation" [ref=e13] [cursor=pointer]
+          - button "open menu" [ref=e16] [cursor=pointer]
+  - main [ref=e17]:
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - heading "Agent feedback" [level=1] [ref=e20]
+        - paragraph [ref=e21]: Review a report prepared by your coding agent before deciding whether to send it to the Next.js team. The agent attempts to anonymize each report, but you should remove anything you don't want to include. Nothing is sent until you choose to.
+      - status [ref=e22]:
+        - generic [ref=e23]: Loading feedback report
+  - alert [ref=e31]

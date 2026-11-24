@@ -1,0 +1,298 @@
+================================================================================
+PROJECT IMPLEMENTATION PLAN: SIMPLE F&B ORDERING SYSTEM (PLUGGABLE PAYMENT GATEWAY)
+================================================================================
+
+1. PROJECT METADATA & OVERVIEW
+--------------------------------------------------------------------------------
+* Project Title   : Simple F&B Ordering System with Reusable Payment Gateway
+* Version / Date  : v1.0.0 - 2026-11-23
+* Core Purpose    : Web application for ordering food and beverages featuring a
+                    decoupled Adapter-based Payment Gateway layer. Supports zero-
+                    dependency Dummy payment simulation in development and seamless
+                    migration to Xendit via environment variables without altering
+                    business logic or UI.
+* Target Roles    : Guest (Browse Menu), Customer (Order, Pay, Track Orders),
+                    Admin (Manage F&B Menu & Update Kitchen/Order Status)
+* Architecture    : Full-Stack Next.js (App Router) - Feature-Based + Thin
+                    Routing + Strategy/Adapter Pattern for Payment Gateway
+
+
+2. DEPENDENCIES & INSTALLATION COMMANDS
+--------------------------------------------------------------------------------
+Run the following commands to initialize the standard modern stack:
+
+[Step 2.1] Create Next.js Project (TypeScript, Tailwind CSS, ESLint, App Router)
+  npx create-next-app@latest fnb-ordering-app --typescript --tailwind --eslint --app --src-dir
+
+[Step 2.2] Core Backend, Database & Validation Dependencies
+  npm install zod prisma @prisma/client
+  npm install -D prisma
+
+[Step 2.3] Authentication & Security
+  npm install better-auth
+
+[Step 2.4] UI, Icons & Form Utilities
+  npm install lucide-react clsx tailwind-merge sonner
+  npx shadcn@latest init
+  npx shadcn@latest add button input label card dialog form badge sheet select table
+
+[Step 2.5] Payment Gateway & Optional Packages
+  npm install xendit-node                  # Official Xendit SDK (used by XenditProvider)
+  # Note: DummyPaymentProvider requires ZERO external third-party libraries.
+
+
+3. DATABASE SCHEMA & CORE ENTITIES
+--------------------------------------------------------------------------------
+Define models and relationships in prisma/schema.prisma:
+
+* Entity 1: User
+  - Fields: id (PK), name, email (Unique), passwordHash, role (CUSTOMER | ADMIN),
+            createdAt, updatedAt
+
+* Entity 2: MenuItem
+  - Fields: id (PK), name, description, price (Int - IDR), category (FOOD | DRINK),
+            imageUrl (Nullable), isAvailable (Boolean), createdAt, updatedAt
+
+* Entity 3: Order
+  - Fields: id (PK), orderNumber (Unique, e.g., ORD-20261123-001),
+            userId (FK -> User.id), totalAmount (Int),
+            status (PENDING_PAYMENT | PAID | PREPARING | COMPLETED | CANCELLED),
+            notes (Nullable), createdAt, updatedAt
+
+* Entity 4: OrderItem
+  - Fields: id (PK), orderId (FK -> Order.id), menuItemId (FK -> MenuItem.id),
+            quantity (Int), unitPrice (Int - price snapshot), subtotal (Int)
+
+* Entity 5: PaymentTransaction
+  - Fields: id (PK), orderId (FK -> Order.id), provider (DUMMY | XENDIT),
+            externalId (Unique), checkoutUrl, amount (Int),
+            paymentMethod (Nullable), status (PENDING | PAID | EXPIRED | FAILED),
+            rawWebhookPayload (Json, Nullable), paidAt (DateTime, Nullable),
+            expiresAt (DateTime), createdAt, updatedAt
+
+* Relationships:
+  - One User has many Orders (Restrict delete if orders exist).
+  - One Order has many OrderItems (Cascade delete when Order is deleted).
+  - One MenuItem has many OrderItems (Restrict delete to preserve order history).
+  - One Order has one or many PaymentTransactions (supports invoice regeneration).
+
+
+4. DIRECTORY STRUCTURE (FEATURE-BASED ARCHITECTURE)
+--------------------------------------------------------------------------------
+Strictly follow this layout. Keep src/app/ thin and domain-free.
+
+├── prisma/
+│   ├── schema.prisma                   # Database models & relations
+│   └── seed.ts                         # Initial dummy F&B menu & admin user seed
+├── public/                             # Static assets (menu placeholders, icons)
+├── src/
+│   ├── app/                            # 1. ROUTING LAYER (URLs, Layouts, Loading/Error)
+│   │   ├── (public)/                   # Unauthenticated routes
+│   │   │   ├── page.tsx                # F&B Menu Catalog + Interactive Cart Drawer
+│   │   │   └── checkout/
+│   │   │       └── dummy/
+│   │   │           └── [externalId]/
+│   │   │               └── page.tsx    # Local Dummy Hosted Invoice Simulator UI
+│   │   ├── (auth)/                     # Auth routes (URL excludes "(auth)")
+│   │   │   ├── layout.tsx
+│   │   │   ├── login/page.tsx
+│   │   │   └── register/page.tsx
+│   │   ├── (dashboard)/                # Protected routes (Requires Auth)
+│   │   │   ├── layout.tsx              # App Shell (Navbar, Role Check)
+│   │   │   ├── orders/
+│   │   │   │   ├── page.tsx            # Customer Order History & Live Status
+│   │   │   │   ├── loading.tsx         # Skeleton fallback UI
+│   │   │   │   └── error.tsx           # Route error boundary
+│   │   │   └── admin/
+│   │   │       ├── menu/
+│   │   │       │   └── page.tsx        # Admin CRUD for Food & Drinks
+│   │   │       └── orders/
+│   │   │           └── page.tsx        # Admin Kitchen & Order Status Management
+│   │   ├── api/                        # External webhooks & auth callbacks ONLY
+│   │   │   ├── auth/[...all]/route.ts
+│   │   │   └── webhooks/
+│   │   │       └── payment/route.ts    # Unified Webhook Endpoint (Dummy & Xendit)
+│   │   ├── globals.css
+│   │   └── layout.tsx                  # Root layout (Fonts, Theme, Toaster)
+│   │
+│   ├── features/                       # 2. DOMAIN LAYER (Grouped by feature)
+│   │   ├── auth/
+│   │   │   ├── actions/                # login.ts, register.ts, logout.ts
+│   │   │   ├── components/             # login-form.tsx, register-form.tsx
+│   │   │   ├── schemas/                # auth-schema.ts (Zod)
+│   │   │   └── types/                  # auth.types.ts
+│   │   │
+│   │   ├── menu/                       # Food & Beverage Catalog Domain
+│   │   │   ├── actions/                # create-menu.ts, update-menu.ts, delete-menu.ts
+│   │   │   ├── queries/                # get-menus.ts, get-menu-by-id.ts
+│   │   │   ├── components/             # menu-grid.tsx, menu-card.tsx, menu-form-dialog.tsx
+│   │   │   ├── schemas/                # menu-schema.ts
+│   │   │   └── types/                  # menu.types.ts
+│   │   │
+│   │   ├── orders/                     # Cart, Checkout & Order Tracking Domain
+│   │   │   ├── actions/                # create-order.ts, update-order-status.ts
+│   │   │   ├── queries/                # get-user-orders.ts, get-all-orders.ts
+│   │   │   ├── components/             # cart-drawer.tsx, order-list.tsx, order-status-badge.tsx
+│   │   │   ├── hooks/                  # use-cart.ts (Client cart state)
+│   │   │   ├── schemas/                # order-schema.ts
+│   │   │   └── types/                  # order.types.ts
+│   │   │
+│   │   └── payments/                   # Payment UI & Transaction Read Layer
+│   │       ├── queries/                # get-payment-by-external-id.ts
+│   │       ├── components/             # dummy-checkout-simulator.tsx
+│   │       └── types/                  # payment-ui.types.ts
+│   │
+│   ├── components/                     # 3. SHARED UI LAYER (Domain-agnostic)
+│   │   ├── ui/                         # Base primitives (shadcn/ui components)
+│   │   └── shared/                     # Cross-feature UI (navbar, empty-state, currency-text)
+│   │
+│   ├── lib/                            # 4. INFRASTRUCTURE, CONFIG & ADAPTERS
+│   │   ├── db.ts                       # Singleton Prisma client instance
+│   │   ├── auth.ts                     # Auth config & server session helpers
+│   │   ├── utils.ts                    # formatRupiah(), generateOrderNumber(), cn()
+│   │   └── payment/                    # REUSABLE PAYMENT GATEWAY ADAPTER LAYER
+│   │       ├── types.ts                # PaymentGatewayProvider interface & normalized DTOs
+│   │       ├── factory.ts              # getPaymentProvider() switcher via PAYMENT_PROVIDER
+│   │       └── providers/
+│   │           ├── dummy-provider.ts   # Local Dummy implementation (Zero external libs)
+│   │           └── xendit-provider.ts  # Xendit Invoice API implementation (xendit-node)
+│   │
+│   ├── types/                          # 5. GLOBAL TYPES
+│   │   └── action-response.ts          # Standardized Server Action return contract
+│   │
+│   └── middleware.ts                   # Edge/Server route guard & role redirects
+├── .env                                # Local environment secrets (gitignored)
+└── .env.example                        # Safe template of required env variables
+
+
+5. FEATURE SPECIFICATIONS (QUERIES, ACTIONS & PAYMENT ADAPTER)
+--------------------------------------------------------------------------------
+[Core Infrastructure: Reusable Payment Gateway Adapter (src/lib/payment/)]
+  * Adapter Contract (src/lib/payment/types.ts):
+    - NormalizedPaymentStatus: "PENDING" | "PAID" | "EXPIRED" | "FAILED"
+    - PaymentGatewayProvider interface:
+        1. createInvoice(input: CreateInvoiceInput): Promise<CreateInvoiceResult>
+        2. verifyAndParseWebhook(headers: Headers, rawBody: string): Promise<NormalizedWebhookPayload>
+  * Provider Factory (src/lib/payment/factory.ts):
+    - Reads process.env.PAYMENT_PROVIDER ("dummy" | "xendit").
+    - Returns DummyPaymentProvider by default or XenditPaymentProvider when switched.
+  * Unified Webhook Handler (src/app/api/webhooks/payment/route.ts):
+    - Receives POST callbacks from either Dummy Simulator UI or Xendit Servers.
+    - Delegates header/signature verification & payload parsing to getPaymentProvider().
+    - Performs idempotent DB transaction updating PaymentTransaction & Order status.
+
+[Feature 1: Menu Management (src/features/menu/)]
+  * Queries (src/features/menu/queries/):
+    - get-menus.ts          : Fetch menu items filtered by category (FOOD/DRINK) & search.
+    - get-menu-by-id.ts     : Fetch single menu item details.
+  * Actions (src/features/menu/actions/):
+    - create-menu.ts        : Admin-only -> Validate Zod -> Insert DB -> revalidatePath.
+    - update-menu.ts        : Admin-only -> Validate Zod -> Update DB -> revalidatePath.
+    - delete-menu.ts        : Admin-only -> Soft-disable or Delete -> revalidatePath.
+
+[Feature 2: Orders & Checkout (src/features/orders/)]
+  * Queries (src/features/orders/queries/):
+    - get-user-orders.ts    : Fetch orders & payment status scoped to session.user.id.
+    - get-all-orders.ts     : Admin-only -> Fetch incoming orders for kitchen processing.
+  * Actions (src/features/orders/actions/):
+    - create-order.ts       : Verify session -> Validate cart items -> Recalculate prices
+                              from DB -> Create Order & OrderItems -> Call
+                              getPaymentProvider().createInvoice() -> Save
+                              PaymentTransaction -> Return checkoutUrl.
+    - update-order-status.ts: Admin-only -> Transition PAID -> PREPARING -> COMPLETED.
+
+[Feature 3: Dummy Payment Simulator (src/features/payments/)]
+  * Queries (src/features/payments/queries/):
+    - get-payment-by-external-id.ts : Fetch PaymentTransaction + Order summary for
+                                      /checkout/dummy/[externalId] page.
+  * Components (src/features/payments/components/):
+    - dummy-checkout-simulator.tsx  : Mimics Xendit Hosted Invoice UI with buttons to
+                                      simulate "Pay Now (PAID)" or "Expire Invoice",
+                                      sending a standardized webhook POST request to
+                                      /api/webhooks/payment.
+
+
+6. STRICT CODING RULES & AI AGENT GUARDRAILS
+--------------------------------------------------------------------------------
+[Rule 1] Naming Conventions
+  - Use kebab-case for ALL files and directories (e.g., dummy-checkout-simulator.tsx).
+  - Use PascalCase for React component names and TypeScript types/interfaces.
+  - Use camelCase for functions, variables, and Server Actions.
+
+[Rule 2] Unidirectional Import Flow
+  - src/app/       -> MAY import from features/, components/, lib/, types/.
+  - src/features/  -> MAY import from components/, lib/, types/.
+  - src/features/  -> MUST NOT import from src/app/.
+  - Cross-feature imports are FORBIDDEN. Move shared code to components/shared/
+    or lib/.
+
+[Rule 3] Separation of Reads (Queries) and Writes (Actions)
+  - NEVER write direct database queries inside src/app/**/page.tsx.
+  - All SELECT operations go into features/<name>/queries/ (Server-only).
+  - All INSERT/UPDATE/DELETE operations go into features/<name>/actions/ with
+    "use server" directive and call revalidatePath() upon success.
+
+[Rule 4] Standardized Server Action Contract (src/types/action-response.ts)
+  Every Server Action MUST return this exact shape:
+
+    export type ActionResponse<T = null> = {
+      success: boolean;
+      message: string;
+      data?: T;
+      errors?: Record<string, string[]>;
+    };
+
+[Rule 5] Security & Data Isolation
+  - Validate 100% of Server Action inputs on the server using Zod schemas.
+  - NEVER trust item prices sent from the client cart; always fetch authoritative
+    prices from MenuItem in the database during create-order.ts.
+  - Always verify authenticated session and role inside every query and action.
+  - Always scope customer queries by userId (WHERE userId = session.user.id) to
+    prevent IDOR vulnerabilities.
+  - Never expose secret keys (XENDIT_SECRET_KEY, PAYMENT_WEBHOOK_SECRET) in
+    NEXT_PUBLIC_ environment variables.
+
+[Rule 6] Payment Gateway Isolation & Webhook Idempotency
+  - NEVER import `xendit-node` or Xendit-specific types outside
+    src/lib/payment/providers/xendit-provider.ts.
+  - Business logic in features/orders/ MUST ONLY interact with getPaymentProvider().
+  - The webhook endpoint (/api/webhooks/payment) MUST check if PaymentTransaction
+    is already marked PAID before updating records to prevent duplicate processing.
+
+
+7. STEP-BY-STEP EXECUTION PLANNING (ROADMAP)
+--------------------------------------------------------------------------------
+[PHASE 1] Project Setup & Infrastructure
+  [ ] Initialize Next.js project and install dependencies from Section 2.
+  [ ] Configure .env and .env.example (DATABASE_URL, AUTH_SECRET,
+      NEXT_PUBLIC_APP_URL, PAYMENT_PROVIDER="dummy", PAYMENT_WEBHOOK_SECRET,
+      XENDIT_SECRET_KEY, XENDIT_WEBHOOK_TOKEN).
+  [ ] Set up singleton DB client in src/lib/db.ts and ActionResponse<T>.
+  [ ] Write prisma/schema.prisma, run migration, and seed dummy F&B menu + Admin.
+
+[PHASE 2] Pluggable Payment Gateway Layer (Dummy & Xendit)
+  [ ] Define PaymentGatewayProvider interface in src/lib/payment/types.ts.
+  [ ] Implement DummyPaymentProvider in src/lib/payment/providers/dummy-provider.ts.
+  [ ] Implement XenditPaymentProvider in src/lib/payment/providers/xendit-provider.ts.
+  [ ] Create provider switcher in src/lib/payment/factory.ts.
+  [ ] Build unified idempotent webhook route in src/app/api/webhooks/payment/route.ts.
+
+[PHASE 3] Authentication & Route Protection
+  [ ] Configure Better-Auth in src/lib/auth.ts and API route handler.
+  [ ] Build schemas, actions (login/register/logout), and forms in src/features/auth/.
+  [ ] Implement src/middleware.ts to guard /orders and /admin/* routes by role.
+
+[PHASE 4] Core F&B Features & Simulator UI
+  [ ] Step 4.1: Build Menu queries, Admin CRUD actions, and Public Menu Catalog UI.
+  [ ] Step 4.2: Build client cart hook (use-cart.ts) and Cart Drawer component.
+  [ ] Step 4.3: Build createOrderAction integrated with getPaymentProvider().
+  [ ] Step 4.4: Build /checkout/dummy/[externalId] simulator page & trigger webhook.
+  [ ] Step 4.5: Build Customer Order History (/orders) & Admin Order Board (/admin/orders).
+
+[PHASE 5] Resilience, UX Polish & Xendit Migration Verification
+  [ ] Add loading.tsx (skeleton loaders), error.tsx, and empty-state components.
+  [ ] Connect Sonner toast notifications to ActionResponse messages.
+  [ ] Run `npm run build` and `npx tsc --noEmit` to verify zero type/build errors.
+  [ ] Verify Xendit migration readiness by testing PAYMENT_PROVIDER="xendit" in
+      Xendit Test Mode (xnd_development_...) without modifying feature code.
+================================================================================

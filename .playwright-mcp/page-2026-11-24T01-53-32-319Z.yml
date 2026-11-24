@@ -1,0 +1,30 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e32]:
+    - banner [ref=f1e33]:
+      - generic [ref=f1e34]:
+        - generic [ref=f1e35]:
+          - link "Warung Nusantara" [ref=f1e36] [cursor=pointer]:
+            - /url: /
+          - navigation [ref=f1e44]:
+            - link "Menu" [ref=f1e45] [cursor=pointer]:
+              - /url: /
+            - link "My orders" [ref=f1e46] [cursor=pointer]:
+              - /url: /orders
+        - generic [ref=f1e47]:
+          - generic [ref=f1e48]:
+            - paragraph [ref=f1e49]: Demo Customer
+            - paragraph [ref=f1e50]: CUSTOMER
+          - button "Sign out" [ref=f1e52]
+    - main [ref=f1e53]:
+      - generic [ref=f1e54]:
+        - generic [ref=f1e55]:
+          - heading "My orders" [level=1] [ref=f1e56]
+          - paragraph [ref=f1e57]: Track payment and kitchen progress for every order.
+        - generic [ref=f1e58]:
+          - heading "No orders yet" [level=3] [ref=f1e59]
+          - paragraph [ref=f1e60]: Browse the menu and place your first order.
+          - link "Browse menu" [ref=f1e62] [cursor=pointer]:
+            - /url: /
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=f1e27] [cursor=pointer]
+  - alert [ref=f1e31]: My orders

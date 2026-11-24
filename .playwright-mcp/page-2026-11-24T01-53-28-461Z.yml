@@ -1,0 +1,28 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - link "Warung Nusantara" [ref=f1e3] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f1e5]:
+      - generic [ref=f1e6]:
+        - heading "Welcome back" [level=3] [ref=f1e7]
+        - paragraph [ref=f1e8]: Sign in to place orders and track your kitchen status.
+      - generic [ref=f1e9]:
+        - generic [ref=f1e10]:
+          - generic [ref=f1e11]:
+            - text: Email
+            - textbox "Email" [ref=f1e12]:
+              - /placeholder: you@example.com
+          - generic [ref=f1e13]:
+            - text: Password
+            - textbox "Password" [ref=f1e14]
+          - button "Sign in" [ref=f1e15]
+          - paragraph [ref=f1e16]:
+            - text: No account?
+            - link "Create one" [ref=f1e17] [cursor=pointer]:
+              - /url: /register
+        - generic [ref=f1e18]:
+          - paragraph [ref=f1e19]: Demo accounts
+          - paragraph [ref=f1e20]: "Customer: customer@fnb.local / Customer12345"
+          - paragraph [ref=f1e21]: "Admin: admin@fnb.local / Admin12345"
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=f1e27] [cursor=pointer]
